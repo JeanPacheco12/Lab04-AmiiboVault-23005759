@@ -401,12 +401,18 @@ class AmiiboViewModel(
         }
     }
 
+    /**
+     Hay que modificar esta funcion de refreshAmiibos para que intente
+     rescatar los del _uiState actual (si es que room ya los mostró) antes de que
+     se declare el error
+     **/
+
     fun refreshAmiibos() {
         viewModelScope.launch {
             // Determinar estado durante la carga
             val currentAmiibos = _loadedAmiibos.value
             if (currentAmiibos.isEmpty()) {
-                // No hay cache, mostrar loading
+                // No hay cache "manual", mostrar loading
                 _uiState.value = AmiiboUiState.Loading
             } else {
                 // Hay cache, mostrar datos con indicador de refresh
@@ -417,10 +423,8 @@ class AmiiboViewModel(
             }
 
             try {
-                // Llamar al repositorio para refrescar TODOS los datos desde la API
                 repository.refreshAmiibos()
 
-                // Reiniciar paginación y cargar primera página
                 resetPagination()
                 val firstPageItems = repository.getAmiibosPage(0, _pageSize.value)
                 _loadedAmiibos.value = firstPageItems
@@ -432,44 +436,44 @@ class AmiiboViewModel(
                 )
 
             } catch (e: AmiiboError) {
-                /**
-                 * MANEJO DE ERRORES TIPADOS
-                 * -------------------------
-                 * Capturamos AmiiboError (sealed class) para proporcionar:
-                 * 1. Mensajes específicos por tipo de error
-                 * 2. Indicar si se puede reintentar
-                 * 3. Tipo de error para que la UI muestre iconos apropiados
-                 *
-                 * Esto mejora la UX porque el usuario sabe:
-                 * - Si es su conexión (Network) → revisar WiFi/datos
-                 * - Si es del servidor (Parse) → esperar y reintentar después
-                 * - Si es local (Database) → reiniciar app o liberar espacio
-                 */
-                val cachedAmiibos = _loadedAmiibos.value
-                val errorType = ErrorType.from(e)
-
-                // Determinar si el error es recuperable con un reintento
-                val isRetryable = when (e) {
-                    is AmiiboError.Network -> true   // Puede mejorar la conexión
-                    is AmiiboError.Parse -> false    // Requiere fix en API/app
-                    is AmiiboError.Database -> true  // Puede liberarse espacio
-                    is AmiiboError.Unknown -> true   // Vale la pena reintentar
+                // 1. INTENTAR RECUPERAR DATOS VISIBLES ACTUALMENTE
+                // Si Room ya mostró datos (por observeDatabaseChanges), úsalos.
+                val currentState = _uiState.value
+                val visibleData = if (currentState is AmiiboUiState.Success) {
+                    currentState.amiibos
+                } else {
+                    _loadedAmiibos.value
                 }
 
+                val errorType = ErrorType.from(e)
+                val isRetryable = when (e) {
+                    is AmiiboError.Network -> true
+                    is AmiiboError.Parse -> false
+                    is AmiiboError.Database -> true
+                    is AmiiboError.Unknown -> true
+                }
+
+                // Pasamos visibleData en lugar de solo _loadedAmiibos.value
                 _uiState.value = AmiiboUiState.Error(
                     message = e.message,
                     errorType = errorType,
                     isRetryable = isRetryable,
-                    cachedAmiibos = cachedAmiibos
+                    cachedAmiibos = visibleData
                 )
             } catch (e: Exception) {
-                // Catch-all para errores no tipados (no debería llegar aquí)
-                val cachedAmiibos = _loadedAmiibos.value
+                // Misma lógica para error genérico
+                val currentState = _uiState.value
+                val visibleData = if (currentState is AmiiboUiState.Success) {
+                    currentState.amiibos
+                } else {
+                    _loadedAmiibos.value
+                }
+
                 _uiState.value = AmiiboUiState.Error(
-                    message = e.message ?: "Error desconocido al cargar datos",
+                    message = e.message ?: "Error desconocido",
                     errorType = ErrorType.UNKNOWN,
                     isRetryable = true,
-                    cachedAmiibos = cachedAmiibos
+                    cachedAmiibos = visibleData
                 )
             }
         }
