@@ -75,6 +75,13 @@ import com.curso.android.module3.amiibo.ui.viewmodel.AmiiboUiState
 import com.curso.android.module3.amiibo.ui.viewmodel.AmiiboViewModel
 import org.koin.androidx.compose.koinViewModel
 
+// Imports adicionales para la funcionalidad de snackbar
+
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+
 /**
  * ============================================================================
  * AMIIBO LIST SCREEN - Pantalla Principal (Jetpack Compose)
@@ -143,10 +150,15 @@ fun AmiiboListScreen(
     val isLoadingMore by viewModel.isLoadingMore.collectAsStateWithLifecycle()
     val paginationError by viewModel.paginationError.collectAsStateWithLifecycle()
 
+    // CAMBIO: El estado para controlar el Snackbar.
+    val snackbarHostState = remember { SnackbarHostState() }
+
     // Estado para el dropdown del tamaño de página
     var showPageSizeDropdown by remember { mutableStateOf(false) }
 
     Scaffold(
+        // CAMBIO: Se agrega el Host del Snackbar al Scaffold
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             /**
              * TopAppBar de Material 3.
@@ -304,15 +316,29 @@ fun AmiiboListScreen(
              * - Solo ve "Reintentar" cuando tiene sentido
              */
             is AmiiboUiState.Error -> {
+                // CAMBIO: Lógica Graceful Offline.
                 if (state.cachedAmiibos.isNotEmpty()) {
-                    // Hay datos en cache: mostrar datos + mensaje de error
-                    Column(modifier = Modifier.padding(paddingValues)) {
-                        ErrorBanner(
+                    // EFECTO SECUNDARIO: Mostrar el Snackbar.
+                    // Usamos el mensaje como key para que si cambia el error, vuelva a salir.
+                    LaunchedEffect(state.message) {
+                        val result = snackbarHostState.showSnackbar(
                             message = state.message,
-                            errorType = state.errorType,
-                            isRetryable = state.isRetryable,
-                            onRetry = { viewModel.refreshAmiibos() }
+                            actionLabel = if (state.isRetryable) "Reintentar" else null,
+                            duration = SnackbarDuration.Indefinite // Se queda hasta que el usuario lo quite o reintente.
                         )
+
+                        if (result == SnackbarResult.ActionPerformed) {
+                            viewModel.refreshAmiibos()
+                        }
+                    }
+
+                    // UI: Mostrar la lista vieja (Cached Data).
+                    // Permite PullToRefresh incluso en estado de error.
+                    PullToRefreshBox(
+                        isRefreshing = false, // No estamos refrescando activamente (falló).
+                        onRefresh = { viewModel.refreshAmiibos() },
+                        modifier = Modifier.padding(paddingValues)
+                    ) {
                         AmiiboGrid(
                             amiibos = state.cachedAmiibos,
                             onAmiiboClick = onAmiiboClick,
