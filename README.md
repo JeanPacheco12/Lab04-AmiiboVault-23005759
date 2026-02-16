@@ -35,7 +35,7 @@ El proyecto sigue una arquitectura **MVVM (Model-View-ViewModel)** con **Clean A
 * **Carga de Imágenes:** Coil
 * **Concurrencia:** Coroutines & Flows (StateFlow, SharedFlow)
 
-## 📂 Estructura de Archivos Clave
+## Estructura de Archivos Clave
 
 * `data/dao/AmiiboDao.kt`: Consultas SQL (`searchAmiibos`, `getAll`).
 * `repository/AmiiboRepository.kt`: Lógica de sincronización y fuente de verdad única.
@@ -44,6 +44,6 @@ El proyecto sigue una arquitectura **MVVM (Model-View-ViewModel)** con **Clean A
 
 ---
 
-## 🎥 Video de explicación:
+## Video de explicación:
 
 [(https://youtu.be/wxPR03D4R28)]
