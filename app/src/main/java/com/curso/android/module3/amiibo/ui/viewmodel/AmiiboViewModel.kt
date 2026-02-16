@@ -12,6 +12,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+// IMPORTS IMPORTANTES: Son para que funcione bien flatMapLatest.
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flatMapLatest
 
 /**
  * ============================================================================
@@ -194,6 +197,14 @@ class AmiiboViewModel(
     /** Indica si está cargando la siguiente página */
     private val _isLoadingMore = MutableStateFlow(false)
     val isLoadingMore: StateFlow<Boolean> = _isLoadingMore.asStateFlow()
+    /** CAMBIO: Variable para cambiar el texto de búsqueda */
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery = _searchQuery.asStateFlow()
+
+    // FUNCION NUEVA: Esta funcion actualiza el texto de búsqueda desde la UI.
+    fun onSearchQueryChanged(query: String) {
+        _searchQuery.value = query
+    }
 
     /**
      * =========================================================================
@@ -218,16 +229,24 @@ class AmiiboViewModel(
     val pageSizeOptions: List<Int> = AmiiboRepository.PAGE_SIZE_OPTIONS
 
     /**
-     * Flow de amiibos desde la base de datos.
+     * Flow reactivo que alterna entre la lista completa y la búsqueda.
      *
-     * stateIn(): Convierte Flow a StateFlow
-     * - viewModelScope: Se cancela cuando el ViewModel se destruye
-     * - SharingStarted.WhileSubscribed(5000): Mantiene activo 5s después
-     *   de que el último suscriptor se va (optimización para rotación)
-     * - emptyList(): Valor inicial mientras se carga
+     * flatMapLatest:
+     * 1. Observa cambios en _searchQuery
+     * 2. Cuando cambia el texto, CANCELA la consulta anterior
+     * 3. Ejecuta la nueva consulta (searchAmiibos o observeAmiibos)
      */
-    private val amiibosFromDb: StateFlow<List<AmiiboEntity>> = repository
-        .observeAmiibos()
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val amiibosFromDb: StateFlow<List<AmiiboEntity>> = _searchQuery
+        .flatMapLatest { query ->
+            if (query.isBlank()) {
+                // Si está vacío, trae TODOS (como antes).
+                repository.observeAmiibos()
+            } else {
+                // Si hay texto, buscaen la BD.
+                repository.searchAmiibos(query)
+            }
+        }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
