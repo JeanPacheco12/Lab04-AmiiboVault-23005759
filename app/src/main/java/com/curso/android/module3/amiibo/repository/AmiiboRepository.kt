@@ -81,6 +81,19 @@ class AmiiboRepository(
 
     /**
      * =========================================================================
+     * CHALLENGE PART 2: LOCAL SEARCH
+     * =========================================================================
+     * Búsqueda reactiva de Amiibos.
+     *
+     * @param query Texto a buscar
+     * @return Flow con los resultados filtrados en tiempo real
+     */
+    fun searchAmiibos(query: String): Flow<List<AmiiboEntity>> {
+        return amiiboDao.searchAmiibos(query)
+    }
+
+    /**
+     * =========================================================================
      * REFRESCAR AMIIBOS (SINCRONIZACIÓN)
      * =========================================================================
      *
