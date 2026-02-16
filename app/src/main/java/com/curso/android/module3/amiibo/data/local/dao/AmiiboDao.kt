@@ -63,6 +63,32 @@ interface AmiiboDao {
 
     /**
      * =========================================================================
+     * CHALLENGE PART 2: LOCAL SEARCH
+     * =========================================================================
+     * Búsqueda reactiva de Amiibos por nombre.
+     *
+     * @param query Texto a buscar (ej: "Mario")
+     * @return Flow con la lista filtrada actualizada en tiempo real
+     *
+     * EXPLICACIÓN SQL:
+     * - WHERE name LIKE '%' || :query || '%':
+     * Busca cualquier nombre que CONTENGA el texto 'query'.
+     * Los signos '%' son comodines en SQL.
+     * El operador || concatena strings en SQLite.
+     *
+     * - COLLATE NOCASE:
+     * Hace la búsqueda insensible a mayúsculas/minúsculas.
+     * "mario" encontrará "Mario".
+     */
+    @Query(""" 
+        SELECT * FROM amiibos 
+        WHERE name LIKE '%' || :query || '%' 
+        ORDER BY name ASC 
+    """)
+    fun searchAmiibos(query: String): Flow<List<AmiiboEntity>>
+
+    /**
+     * =========================================================================
      * INSERT: Insertar lista de Amiibos
      * =========================================================================
      *
