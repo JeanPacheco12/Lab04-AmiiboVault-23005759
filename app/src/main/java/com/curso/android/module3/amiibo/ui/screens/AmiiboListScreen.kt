@@ -75,12 +75,20 @@ import com.curso.android.module3.amiibo.ui.viewmodel.AmiiboUiState
 import com.curso.android.module3.amiibo.ui.viewmodel.AmiiboViewModel
 import org.koin.androidx.compose.koinViewModel
 
-// Imports adicionales para la funcionalidad de snackbar
+// Imports adicionales para la funcionalidad de snackbar.
 
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+
+// Imports adicionales para la funcionalidad de la barra de busqueda.
+
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.SearchOff
 
 /**
  * ============================================================================
@@ -149,88 +157,23 @@ fun AmiiboListScreen(
     val hasMorePages by viewModel.hasMorePages.collectAsStateWithLifecycle()
     val isLoadingMore by viewModel.isLoadingMore.collectAsStateWithLifecycle()
     val paginationError by viewModel.paginationError.collectAsStateWithLifecycle()
+    // CAMBIO: Observamos el texto que escribe el usuario.
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
 
     // CAMBIO: El estado para controlar el Snackbar.
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Estado para el dropdown del tamaño de página
-    var showPageSizeDropdown by remember { mutableStateOf(false) }
-
     Scaffold(
-        // CAMBIO: Se agrega el Host del Snackbar al Scaffold
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
-            /**
-             * TopAppBar de Material 3.
-             *
-             * Componentes:
-             * - title: Título de la app
-             * - actions: Selector de límite + botón refresh
-             * - colors: Esquema de colores personalizado
-             */
-            TopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(R.string.app_name),
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                },
-                actions = {
-                    /**
-                     * CONCEPTO: Dropdown para seleccionar tamaño de página
-                     *
-                     * Box envuelve el botón y el menú para posicionar
-                     * correctamente el dropdown debajo del botón.
-                     */
-                    Box {
-                        // Botón que muestra el tamaño de página actual
-                        TextButton(
-                            onClick = { showPageSizeDropdown = true }
-                        ) {
-                            Text(
-                                text = "Página: $pageSize",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-
-                        // Menú desplegable con opciones
-                        DropdownMenu(
-                            expanded = showPageSizeDropdown,
-                            onDismissRequest = { showPageSizeDropdown = false }
-                        ) {
-                            viewModel.pageSizeOptions.forEach { size ->
-                                DropdownMenuItem(
-                                    text = { Text("$size por página") },
-                                    onClick = {
-                                        viewModel.setPageSize(size)
-                                        showPageSizeDropdown = false
-                                    },
-                                    leadingIcon = if (size == pageSize) {
-                                        { Text("✓") }
-                                    } else null
-                                )
-                            }
-                        }
-                    }
-
-                    // Botón de refresh
-                    IconButton(onClick = { viewModel.refreshAmiibos() }) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = stringResource(R.string.retry)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+            // CAMBIO PARTE 2: Usamos nuestra TopBar personalizada con búsqueda
+            SearchTopAppBar(
+                query = searchQuery,
+                onQueryChanged = { viewModel.onSearchQueryChanged(it) },
+                pageSize = pageSize,
+                pageSizeOptions = viewModel.pageSizeOptions,
+                onPageSizeChanged = { viewModel.setPageSize(it) },
+                onRefresh = { viewModel.refreshAmiibos() }
             )
         }
     ) { paddingValues ->
@@ -288,17 +231,23 @@ fun AmiiboListScreen(
                     onRefresh = { viewModel.refreshAmiibos() },
                     modifier = Modifier.padding(paddingValues)
                 ) {
-                    // Grid de Amiibos con paginación
-                    AmiiboGrid(
-                        amiibos = state.amiibos,
-                        onAmiiboClick = onAmiiboClick,
-                        hasMorePages = hasMorePages,
-                        isLoadingMore = isLoadingMore,
-                        paginationError = paginationError,
-                        onLoadMore = { viewModel.loadNextPage() },
-                        onRetryLoadMore = { viewModel.retryLoadMore() },
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    // --- MODIFICAR ESTA PARTE ---
+                    if (state.amiibos.isEmpty() && searchQuery.isNotEmpty()) {
+                        // Si buscó algo y no hay resultados:
+                        EmptySearchContent(query = searchQuery)
+                    } else {
+                        // Si hay resultados o la lista normal:
+                        AmiiboGrid(
+                            amiibos = state.amiibos,
+                            onAmiiboClick = onAmiiboClick,
+                            hasMorePages = hasMorePages,
+                            isLoadingMore = isLoadingMore,
+                            paginationError = paginationError,
+                            onLoadMore = { viewModel.loadNextPage() },
+                            onRetryLoadMore = { viewModel.retryLoadMore() },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
             }
 
@@ -882,6 +831,112 @@ private fun AmiiboCard(
                     }
                 }
             }
+        }
+    }
+}
+
+// Nuevos composable.
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SearchTopAppBar(
+    query: String,
+    onQueryChanged: (String) -> Unit,
+    pageSize: Int,
+    pageSizeOptions: List<Int>,
+    onPageSizeChanged: (Int) -> Unit,
+    onRefresh: () -> Unit
+) {
+    var showMenu by remember { mutableStateOf(false) }
+
+    TopAppBar(
+        title = {
+            // Campo de búsqueda en el título
+            androidx.compose.material3.OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChanged,
+                placeholder = { Text("Buscar Amiibo...") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { onQueryChanged("") }) {
+                            Icon(Icons.Default.Close, contentDescription = "Limpiar")
+                        }
+                    }
+                },
+                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = Color.Transparent
+                ),
+                shape = RoundedCornerShape(24.dp)
+            )
+        },
+        actions = {
+            // Menú de opciones (3 puntos) para no saturar la barra
+            Box {
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Opciones")
+                }
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false }
+                ) {
+                    // Opción de Refresh
+                    DropdownMenuItem(
+                        text = { Text("Refrescar") },
+                        leadingIcon = { Icon(Icons.Default.Refresh, null) },
+                        onClick = {
+                            onRefresh()
+                            showMenu = false
+                        }
+                    )
+                    // Opciones de Paginación
+                    androidx.compose.material3.HorizontalDivider()
+                    pageSizeOptions.forEach { size ->
+                        DropdownMenuItem(
+                            text = { Text("Ver $size items") },
+                            leadingIcon = if (size == pageSize) {
+                                { Icon(Icons.Default.Check, null) }
+                            } else null,
+                            onClick = {
+                                onPageSizeChanged(size)
+                                showMenu = false
+                            }
+                        )
+                    }
+                }
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    )
+}
+
+@Composable
+fun EmptySearchContent(query: String) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                imageVector = Icons.Default.SearchOff,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "No se encontraron resultados para\n\"$query\"",
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
